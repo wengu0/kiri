@@ -694,8 +694,15 @@ fn extra_veth(id: &str, n: u32) -> String {
     format!("kx{}{n}", &id[..id.len().min(9)])
 }
 
-/// The mounted root of a running container (not an exec).
+/// The root of a running container (not an exec), for the Mac's file
+/// browser. Through /proc it is the container's own view, with its volumes
+/// and bind mounts, as `docker cp` reads a running container: those are
+/// mounted only in its mount namespace, so the overlay the agent mounted
+/// shows their folders empty (#317). Its init just exited: that overlay.
 fn running_rootfs(procs: &HashMap<libc::pid_t, Proc>, paths: &Paths, id: &str) -> Option<std::path::PathBuf> {
+    if let Some(pid) = running_pid(procs, id) {
+        return Some(std::path::PathBuf::from(format!("/proc/{pid}/root")));
+    }
     procs.values().any(|p| p.run.container.is_none() && p.run.id == id).then(|| paths.containers.join(id).join("rootfs"))
 }
 

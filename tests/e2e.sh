@@ -535,6 +535,13 @@ t finder-big "match" bash -c "$D exec fsv sh -c 'head -c 50000000 /dev/urandom >
 t finder-perms-readable "ok" bash -c "$D exec fsv sh -c 'echo s > /tmp/secret; chmod 600 /tmp/secret'; [ \"\$(cat $KFQ/fsv/tmp/secret)\" = s ] && echo ok"
 code finder-no-mkdir 1 mkdir "$KF/fsv/tmp/newdir"
 $D rm -f fsv >/dev/null
+# A volume and a bind mount list their own files, not the empty folders
+# under them in the container's layer (#317).
+FSB=$(mktemp -d); echo from-mac > "$FSB/mac.txt"
+$D run -d --name fsm -v kiri-e2e-fsm:/data -v "$FSB":/bind:ro alpine sh -c 'echo hello > /data/hello.txt; sleep 300' >/dev/null; sleep 0.7
+t finder-volume "hello.txt" ls "$KF/fsm/data"
+t finder-bind "from-mac" cat "$KF/fsm/bind/mac.txt"
+$D rm -f fsm >/dev/null; $D volume rm kiri-e2e-fsm >/dev/null; rm -rf "$FSB"
 t finder-gone "gone" bash -c "ls $KFQ | grep -qx fsv || echo gone"
 
 section "volumes and bind mounts"
