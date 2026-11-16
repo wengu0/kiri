@@ -402,7 +402,19 @@ pub fn start(vm: Arc<VmLink>, id: &str, bindings: &[Binding], target_ip: [u8; 4]
             // Kiri's own container-domain router on this port lets it go
             // (domains::step_aside), and the bind goes again.
             let bound = bind_socket(addr, b.proto == "udp").or_else(|e| {
-                if e.kind() == io::ErrorKind::AddrInUse && b.proto == "tcp" && port != 0 && super::domains::step_aside(port) { bind_socket(addr, false) } else { Err(e) }
+                if e.kind() == io::ErrorKind::AddrInUse && b.proto == "tcp" && port != 0 && super::domains::step_aside(port) {
+                    bind_socket(addr, false)
+                } else if (e.kind() == io::ErrorKind::AddrNotAvailable || e.raw_os_error() == Some(libc::EADDRNOTAVAIL)) && !addr.ip().is_unspecified() {
+                    // Fall back to 0.0.0.0 (or ::) if host IP belongs to host NIC outside the VM
+                    let any = if addr.is_ipv6() {
+                        SocketAddr::new(std::net::Ipv6Addr::UNSPECIFIED.into(), port)
+                    } else {
+                        SocketAddr::new(std::net::Ipv4Addr::UNSPECIFIED.into(), port)
+                    };
+                    bind_socket(any, b.proto == "udp")
+                } else {
+                    Err(e)
+                }
             });
             let sock = match bound {
                 Ok(s) => s,
